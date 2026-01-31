@@ -3,8 +3,13 @@ using Test
 using Aqua
 
 @testset "TVModels.jl" begin
+    # Quality
     @testset "Code quality (Aqua.jl)" begin
         Aqua.test_all(TVModels)
     end
-    # Write your tests here.
+
+    # Tests
+    @testset "Tests" begin
+        include("test_kernels.jl")
+    end
 end

@@ -1,9 +1,15 @@
 name = "TVModels"
 uuid = "8a9d810c-6e40-4c7e-99d9-27ac57eb454c"
-authors = ["Bohdan Hukovych"]
 version = "0.1.0"
+authors = ["Bohdan Hukovych"]
+
+[deps]
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 
 [compat]
+Distributions = "0.25.123"
+Aqua = "0.8"
+Test = "1.0"
 julia = "1.10"
 
 [extras]
