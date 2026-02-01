@@ -7,11 +7,11 @@ using TVModels
         # Basic functionality
         T = 100
         p = 2
-        βs = repeat([0.5, -0.2]', T)
+        βs = repeat([0.0, 0.5, -0.2]', T)
         
         y = simulate_tv_arp(T, βs; σ=1.0, seed=123)
         @test length(y) == T
-        @test y isa Vector{Float64}
+        @test isa(y, Vector{Float64})
         
         # Test reproducibility with seed
         y1 = simulate_tv_arp(T, βs; σ=1.0, seed=42)
@@ -36,14 +36,14 @@ using TVModels
     @testset "simulate_tv_arp_functions" begin
         # Basic functionality with constant functions
         T = 100
-        β_funcs = [t -> 0.5, t -> -0.2]
+        β_funcs = [t -> 0, t -> 0.5, t -> -0.2]
         
         y = simulate_tv_arp(T, β_funcs; σ=1.0, seed=123)
         @test length(y) == T
-        @test y isa Vector{Float64}
+        @test isa(y, Vector{Float64})
         
         # Test with time-varying functions
-        β_funcs_tv = [t -> 0.5 * sin(2π * t), t -> -0.2 * cos(2π * t)]
+        β_funcs_tv = [t -> 0, t -> 0.5 * sin(2π * t), t -> -0.2 * cos(2π * t)]
         y_tv = simulate_tv_arp(T, β_funcs_tv; σ=1.0, seed=456)
         @test length(y_tv) == T
         
@@ -53,13 +53,13 @@ using TVModels
         @test y1 == y2
         
         # Test that function version matches matrix version for constant functions
-        βs_matrix = repeat([0.5, -0.2]', T)
+        βs_matrix = repeat([0.0, 0.5, -0.2]', T)
         y_matrix = simulate_tv_arp(T, βs_matrix; σ=1.0, seed=100)
         y_func = simulate_tv_arp(T, β_funcs; σ=1.0, seed=100)
         @test y_matrix ≈ y_func
         
         # Error handling - function that throws
-        bad_funcs = [t -> 0.5, t -> error("Test error")]
+        bad_funcs = [t -> 0, t -> error("Test error")]
         @test_throws ArgumentError simulate_tv_arp(T, bad_funcs; σ=1.0)
         
         # Function that returns wrong type
@@ -70,11 +70,11 @@ using TVModels
     @testset "simulate_ar" begin
         # Basic functionality
         T = 100
-        βs = [0.5, -0.2]
+        βs = [0.0, 0.5, -0.2]
         
         y = simulate_ar(T, βs; σ=1.0, seed=123)
         @test length(y) == T
-        @test y isa Vector{Float64}
+        @test isa(y, Vector{Float64})
         
         # Test reproducibility with seed
         y1 = simulate_ar(T, βs; σ=1.0, seed=42)
@@ -90,7 +90,7 @@ using TVModels
         @test all(abs.(y_zero) .< 1e-10)  # Should be near zero with zero noise
         
         # Test AR(1) process
-        β_ar1 = [0.8]
+        β_ar1 = [0.0, 0.8]
         y_ar1 = simulate_ar(200, β_ar1; σ=1.0, seed=999)
         @test length(y_ar1) == 200
         
@@ -100,7 +100,7 @@ using TVModels
         @test_throws DomainError simulate_ar(T, Float64[]; σ=1.0)  # Empty vector
         
         # Test with different coefficient values
-        βs_stable = [0.3, 0.3]
+        βs_stable = [0.0, 0.3, 0.3]
         y_stable = simulate_ar(T, βs_stable; σ=1.0, seed=555)
         @test length(y_stable) == T
     end

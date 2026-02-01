@@ -8,7 +8,7 @@ Simulate a time-varying autoregressive process with time-dependent coefficients 
 
 # Arguments
 - `T::Int`: Length of the time series to simulate
-- `βs::AbstractMatrix`: Matrix of coefficients of size (T, p) where p is the order of the AR process
+- `βs::AbstractMatrix`: Matrix of coefficients of size (T, p+1) where p is the order of the AR process (first column is intercept)
 - `σ::Real=1.0`: Standard deviation of the error term (must be non-negative)
 - `seed::Union{Int, Nothing}=nothing`: Random seed for reproducibility
 
@@ -16,7 +16,7 @@ Simulate a time-varying autoregressive process with time-dependent coefficients 
 - `Vector`: Simulated time series of length T
 """
 function simulate_tv_arp(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
-    p  = size(βs, 2)
+    p  = size(βs, 2) - 1
 
     if seed !== nothing
         Random.seed!(seed)
@@ -31,13 +31,13 @@ function simulate_tv_arp(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{
         throw(DomainError("Standard deviation σ must be non-negative"))
     end
     if size(βs, 1) != T
-        throw(DimensionMismatch("βs must be of size (T, p)"))
+        throw(DimensionMismatch("βs must be of size (T, p+1)"))
     end
 
     y = zeros(T+p)
     ϵ = randn(T)
     for t in (p+1):(T+p)
-        y[t] = βs[t-p, :]' * y[(t-p):(t-1)] + σ * ϵ[t-p]
+        y[t] = βs[t-p, 1] + reverse(βs[t-p, 2:end])' * y[(t-p):(t-1)] + σ * ϵ[t-p]
     end
 
     return y[(p+1):end]
@@ -74,11 +74,11 @@ end
 """
     simulate_ar(T::Int, βs::AbstractVector; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
 
-Simulate a standard autoregressive process with constant coefficients.
+Simulate a standard autoregressive process with constant coefficients
 
 # Arguments
 - `T::Int`: Length of the time series to simulate
-- `βs::AbstractVector`: Vector of coefficients of length p for an AR(p) process
+- `βs::AbstractVector`: Vector of coefficients of length p+1 for an AR(p) process (first element is intercept)
 - `σ::Real=1.0`: Standard deviation of the error term (must be non-negative)
 - `seed::Union{Int, Nothing}=nothing`: Random seed for reproducibility
 
@@ -86,7 +86,7 @@ Simulate a standard autoregressive process with constant coefficients.
 - `Vector`: Simulated time series of length T
 """
 function simulate_ar(T::Int, βs::AbstractVector; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
-    p = length(βs)
+    p = length(βs) - 1
 
     if seed !== nothing
         Random.seed!(seed)
@@ -104,7 +104,7 @@ function simulate_ar(T::Int, βs::AbstractVector; σ::Real=1.0, seed::Union{Int,
     y = zeros(T+p)
     ϵ = randn(T)
     for t in (p+1):(T+p)
-        y[t] = βs' * y[(t-p):(t-1)] + σ * ϵ[t-p]
+        y[t] = βs[1] + reverse(βs[2:end])' * y[(t-p):(t-1)] + σ * ϵ[t-p]
     end
 
     return y[(p+1):end]
