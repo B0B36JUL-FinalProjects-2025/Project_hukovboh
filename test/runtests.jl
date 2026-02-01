@@ -12,5 +12,6 @@ using Aqua
     @testset "Tests" begin
         include("test_kernels.jl")
         include("test_simulations.jl")
+        include("test_rolling_regressions.jl")
     end
 end
