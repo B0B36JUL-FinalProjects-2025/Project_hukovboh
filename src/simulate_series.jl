@@ -2,7 +2,7 @@
 using Random
 
 """
-    simulate_tv_arp(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
+    simulate_tv_ar(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
 
 Simulate a time-varying autoregressive process with time-dependent coefficients provided in matrix form.
 
@@ -15,7 +15,7 @@ Simulate a time-varying autoregressive process with time-dependent coefficients 
 # Returns
 - `Vector`: Simulated time series of length T
 """
-function simulate_tv_arp(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
+function simulate_tv_ar(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
     p  = size(βs, 2) - 1
 
     if seed !== nothing
@@ -44,7 +44,7 @@ function simulate_tv_arp(T::Int, βs::AbstractMatrix; σ::Real=1.0, seed::Union{
 end
 
 """
-    simulate_tv_arp(T::Int, β_funcs::AbstractVector{<:Function}; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
+    simulate_tv_ar(T::Int, β_funcs::AbstractVector{<:Function}; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
 
 Simulate a time-varying autoregressive process with time-dependent coefficients provided as functions.
 
@@ -57,7 +57,7 @@ Simulate a time-varying autoregressive process with time-dependent coefficients 
 # Returns
 - `Vector`: Simulated time series of length T
 """
-function simulate_tv_arp(T::Int, β_funcs::AbstractVector{<:Function}; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
+function simulate_tv_ar(T::Int, β_funcs::AbstractVector{<:Function}; σ::Real=1.0, seed::Union{Int, Nothing}=nothing)
     p = length(β_funcs)
     βs = zeros(T, p)
     ts = range(0, stop=1, length=T)
@@ -68,7 +68,7 @@ function simulate_tv_arp(T::Int, β_funcs::AbstractVector{<:Function}; σ::Real=
             throw(ArgumentError("Function at index $i failed to evaluate: $(typeof(e)) - $e"))
         end
     end
-    return simulate_tv_arp(T, βs; σ=σ, seed=seed)
+    return simulate_tv_ar(T, βs; σ=σ, seed=seed)
 end
 
 """

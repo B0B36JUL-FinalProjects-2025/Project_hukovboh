@@ -92,8 +92,8 @@ using Random
         @test_throws DomainError rolling_ar(y, p, p)  # Window size exactly p (need p+1)
         
         # Test with time-varying AR process
-        β_funcs = [t -> 0.5 + 0.2 * sin(2π * t), t -> -0.2]
-        y_tv = simulate_tv_arp(T, β_funcs; σ=0.5, seed=222)
+        β_funcs = [t -> 0.5 + 0.2 * sin(2π * t), t -> -0.2 + 0.1 * cos(2π * t)]
+        y_tv = simulate_tv_ar(T, β_funcs; σ=0.5, seed=222)
         betas_tv = rolling_ar(y_tv, 2, window_size)
         @test size(betas_tv, 2) == 3  # intercept + 2 lags
         # Coefficients should vary over time (standard deviation > 0)
