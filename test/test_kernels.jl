@@ -4,10 +4,10 @@ using TVModels
 using Distributions
 
 @testset "Kernel Functions" begin
-    @testset "epanechnikov" begin
-        @test epanechnikov(0.0) ≈ 0.75
-        @test epanechnikov(1.0) ≈ 0.0
-        @test epanechnikov(2.0) ≈ 0.0
+    @testset "epanechnikov_kernel" begin
+        @test epanechnikov_kernel(0.0) ≈ 0.75
+        @test epanechnikov_kernel(1.0) ≈ 0.0
+        @test epanechnikov_kernel(2.0) ≈ 0.0
     end
 
     @testset "uniform_kernel" begin

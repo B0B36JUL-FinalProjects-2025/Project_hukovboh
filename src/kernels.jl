@@ -3,7 +3,7 @@ using Distributions
 
 
 """
-    epanechnikov(u::Real) -> Float64
+    epanechnikov_kernel(u::Real) -> Float64
 
 Epanechnikov kernel function.
 
@@ -15,11 +15,11 @@ Epanechnikov kernel function.
 
 # Example
 ```julia
-epanechnikov(0.5)   # Returns 0.5625
-epanechnikov(1.5)   # Returns 0.0
+epanechnikov_kernel(0.5)   # Returns 0.5625
+epanechnikov_kernel(1.5)   # Returns 0.0
 ```
 """
-epanechnikov(u::Real) = abs(u) <= 1 ? 0.75 * (1 - u^2) : 0.0
+epanechnikov_kernel(u::Real) = abs(u) <= 1 ? 0.75 * (1 - u^2) : 0.0
 
 """
     uniform_kernel(u::Real) -> Float64
@@ -214,7 +214,7 @@ silverman_kernel(u::Real) = 1/2 * exp(-abs(u)/sqrt(2)) * sin(abs(u)/sqrt(2) + π
 
 # Dictionary of available kernels
 const kernel_dict = Dict(
-    :epanechnikov   => epanechnikov,
+    :epanechnikov   => epanechnikov_kernel,
     :uniform        => uniform_kernel,
     :triangular     => triangular_kernel,
     :gaussian       => gaussian_kernel,
