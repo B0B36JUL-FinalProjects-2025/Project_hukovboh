@@ -11,5 +11,6 @@ using Aqua
     # Tests
     @testset "Tests" begin
         include("test_kernels.jl")
+        include("test_simulations.jl")
     end
 end
