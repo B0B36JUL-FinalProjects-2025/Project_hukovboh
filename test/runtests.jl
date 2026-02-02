@@ -15,5 +15,6 @@ using Aqua
         include("test_rolling_regressions.jl")
         include("test_kernel_regressions.jl")
         include("test_state_models.jl")
+        include("test_bayesian_regressions.jl")
     end
 end
