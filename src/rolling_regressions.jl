@@ -107,8 +107,7 @@ function rolling_ar(y::AbstractVector, p::Int, window_size::Int; expanding::Bool
     betas = Array{Float64}(undef, n_windows, p + 1)  
 
     # Construct lagged design matrix
-    n_obs = T - p
-    X = ones(n_obs, p + 1)
+    X = ones(T - p, p + 1)
     for j in 1:p
         X[:, j + 1] = y[(p - j + 1):(end - j)]
     end

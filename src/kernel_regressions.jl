@@ -38,8 +38,7 @@ function kernel_ar(y::AbstractVector, p::Int, bandwidth::Float64;
     betas = fill(NaN, T-p, k)
 
     # Construct lagged design matrix without intercept
-    n_obs = T - p
-    X = ones(n_obs, p)
+    X = ones(T - p, p)
     for j in 1:p
         X[:, j] = y[(p - j + 1):(end - j)]
     end

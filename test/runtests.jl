@@ -14,5 +14,6 @@ using Aqua
         include("test_simulations.jl")
         include("test_rolling_regressions.jl")
         include("test_kernel_regressions.jl")
+        include("test_state_models.jl")
     end
 end
