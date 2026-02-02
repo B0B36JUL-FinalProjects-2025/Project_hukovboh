@@ -2,6 +2,137 @@
 using LinearAlgebra
 
 """
+    kernel_local_level(y::AbstractVector, bandwidth::Float64; kernel::Function=epanechnikov_kernel, min_n::Int=8)
+
+Performs time-varying level estimation using kernel local-level regression.
+
+# Arguments
+- `y::AbstractVector`: Time series vector
+- `bandwidth::Float64`: Kernel bandwidth parameter in (0, 1]
+- `kernel::Function`: Kernel function to use (default: epanechnikov_kernel). Can be any user-defined function that takes a Real input and returns a Float64 output.
+- `min_n::Int`: Minimum number of observations with positive weights for parameter estimation (default: 8). If not enough NaNs are returned for that time point.
+
+# Returns
+- `levels::Vector`: Vector of shape (T,) containing time-varying level estimates for each time point t = 1, ..., T
+"""
+function kernel_local_level(y::AbstractVector, bandwidth::Float64; 
+                            kernel::Function=epanechnikov_kernel,
+                            min_n::Int=8)
+
+    T = length(y)
+
+    # Validate inputs
+    if T < 1
+        throw(DomainError("Not enough data points to estimate the model"))
+    end
+    if bandwidth <= 0.0 || bandwidth > 1.0
+        throw(DomainError("Bandwidth must be in (0, 1]"))
+    end
+
+    ty = collect(1:T) ./ T
+    levels = fill(NaN, T)
+
+    for idx_t in 1:T  
+        t0 = ty[idx_t]
+        dt = ty .- t0
+
+        # Create weights for kernel regression
+        w = nothing
+        try
+            w = kernel.(dt ./ bandwidth) ./ bandwidth
+        catch e
+            throw(ArgumentError("Kernel function failed to evaluate: $(typeof(e)) - $e"))
+        end
+        
+        # Positive weights only
+        idx = findall(w .> 0)
+        # Skip if not enough points
+        if length(idx) < min_n
+            continue
+        end
+
+        yloc = y[idx]
+        wroot = sqrt.(w[idx])
+        ytilde = yloc .* wroot
+
+        level_estimate = sum(ytilde .* wroot) / sum(w[idx])
+        levels[idx_t] = level_estimate
+    end
+
+    return levels
+end
+
+"""
+    kernel_local_linear(y::AbstractVector, bandwidth::Float64; kernel::Function=epanechnikov_kernel, min_n::Int=8)
+
+Performs time-varying level estimation using kernel local-linear regression.
+
+# Arguments
+- `y::AbstractVector`: Time series vector
+- `bandwidth::Float64`: Kernel bandwidth parameter in (0, 1]
+- `kernel::Function`: Kernel function to use (default: epanechnikov_kernel). Can be any user-defined function that takes a Real input and returns a Float64 output.
+- `min_n::Int`: Minimum number of observations with positive weights for parameter estimation (default: 8). If not enough NaNs are returned for that time point.
+
+# Returns
+- `levels::Vector`: Vector of shape (T,) containing time-varying level estimates for each time point t = 1, ..., T
+"""
+function kernel_local_linear(y::AbstractVector, bandwidth::Float64; 
+                            kernel::Function=epanechnikov_kernel,
+                            min_n::Int=8)
+
+    T = length(y)
+
+    # Validate inputs
+    if T < 1
+        throw(DomainError("Not enough data points to estimate the model"))
+    end
+    if bandwidth <= 0.0 || bandwidth > 1.0
+        throw(DomainError("Bandwidth must be in (0, 1]"))
+    end
+
+    ty = collect(1:T) ./ T
+    levels = fill(NaN, T)
+
+    for idx_t in 1:T  
+        t0 = ty[idx_t]
+        dt = ty .- t0
+
+        # Create weights for kernel regression
+        w = nothing
+        try
+            w = kernel.(dt ./ bandwidth) ./ bandwidth
+        catch e
+            throw(ArgumentError("Kernel function failed to evaluate: $(typeof(e)) - $e"))
+        end
+        
+        # Positive weights only
+        idx = findall(w .> 0)
+        # Skip if not enough points
+        if length(idx) < min_n
+            continue
+        end
+
+        # Construct local-linear design
+        nloc = length(idx)
+        Z = ones(nloc, 2)
+        Z[:, 2] .= dt[idx]
+
+        yloc = y[idx]
+        wroot = sqrt.(w[idx])
+        Ztilde = Z .* wroot
+        ytilde = yloc .* wroot
+
+        θ = Ztilde \ ytilde
+        # Local-linear estimate at u0
+        level_estimate = θ[1]
+
+        levels[idx_t] = level_estimate
+    end
+
+    return levels
+end
+
+"""
     kernel_ar(y::AbstractVector, p::Int, bandwidth::Float64; kernel::Function=epanechnikov_kernel, min_n::Int=8)
 
 Performs time-varying autoregressive (AR) estimation with local-linear kernel estimation.

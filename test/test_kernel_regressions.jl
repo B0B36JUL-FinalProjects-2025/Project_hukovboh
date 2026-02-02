@@ -3,6 +3,32 @@ using Test
 using TVModels
 
 @testset "Kernel Regressions" begin
+    @testset "kernel_local_level" begin
+        Random.seed!(123)
+        T = 80
+        y = 5.0 .+ 0.5 * randn(T)
+        
+        levels = kernel_local_level(y, 0.2)
+        @test length(levels) == T
+        @test abs(mean(levels) - 5.0) < 0.5
+        
+        @test_throws DomainError kernel_local_level(y, -0.1)
+        @test_throws DomainError kernel_local_level(Float64[], 0.2)
+    end
+
+    @testset "kernel_local_linear" begin
+        Random.seed!(456)
+        T = 80
+        y = collect(1:T) .+ 0.3 * randn(T)
+        
+        levels = kernel_local_linear(y, 0.2)
+        @test length(levels) == T
+        @test cor(levels, y) > 0.9
+        
+        @test_throws DomainError kernel_local_linear(y, -0.1)
+        @test_throws DomainError kernel_local_linear(Float64[], 0.2)
+    end
+
     @testset "kernel_regression" begin
         # Generate synthetic data with known relationship
         T = 150
