@@ -7,6 +7,7 @@ include("kernel_regressions.jl")
 include("state_space_models.jl")
 include("bayesian_regressions.jl")
 include("forecast_models.jl")
+include("optimize_parameters.jl")
 include("simulate_series.jl")
 
 # Export
@@ -24,7 +25,8 @@ export QBLL_regression, QBLL_ar
 
 export forecast_regression, forecast_ar, forecast_state_ar, forecast_local_level
 
-export simulate_tv_ar, simulate_ar
+export optimize_kernel_local, optimize_kernel_regression, optimize_kernel_ar, optimize_lowess_regression, optimize_lowess_ar, optimize_QBLL_regression, optimize_QBLL_ar
 
+export simulate_tv_ar, simulate_ar
 
 end

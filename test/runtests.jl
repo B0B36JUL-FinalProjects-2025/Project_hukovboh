@@ -17,5 +17,6 @@ using Aqua
         include("test_state_models.jl")
         include("test_bayesian_regressions.jl")
         include("test_forecast_models.jl")
+        include("test_optimization.jl")
     end
 end
