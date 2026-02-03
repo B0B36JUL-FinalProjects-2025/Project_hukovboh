@@ -22,6 +22,8 @@ export state_local_level, state_ar, state_regression
 
 export QBLL_regression, QBLL_ar
 
+export forecast_regression, forecast_ar, forecast_state_ar, forecast_local_level
+
 export simulate_tv_ar, simulate_ar
 
 
