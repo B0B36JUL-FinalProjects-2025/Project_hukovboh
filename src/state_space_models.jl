@@ -120,162 +120,6 @@ _toQ(Q::AbstractMatrix, k) = Q
 _toQ(Q::AbstractVector, k) = Diagonal(Q)
 _toQ(Q::Real, k) = Q .* I(k)
 
-function _state_ar(y::AbstractVector, p::Int,
-                sigma_eps::Real,
-                Q::AbstractMatrix,
-                β0::AbstractVector,
-                P0::AbstractMatrix;
-                state_transition::Function = (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q),
-                smooth::Bool=true)
-    # y_t = β_0t + ∑β_kt*y_{t-k} + ϵ_t,   ϵ_t ~ N(0, σ_eps²)
-    # β_t = β_{t-1} + η_t,  η_t ~ N(0, Q)
-    # β_0 ~ N(a0, P0)
-
-    T = length(y)
-    if T < p + 1
-        throw(DomainError("Not enough data points to estimate the model"))
-    end
-    if p < 1
-        throw(DomainError("Order p must be at least 1"))
-    end
-    if length(β0) != p + 1
-        throw(DomainError("Initial state mean β0 must have length p + 1"))
-    end
-    if size(Q, 1) != p + 1 || size(Q, 2) != p + 1
-        throw(DomainError("State noise covariance Q must be of size (p + 1) × (p + 1)"))
-    end
-    if size(P0, 1) != p + 1 || size(P0, 2) != p + 1
-        throw(DomainError("Initial state covariance P0 must be of size (p + 1) × (p + 1)"))
-    end
-    if size(Q) != size(P0)
-        throw(DomainError("State noise covariance Q and initial state covariance P0 must have the same dimensions"))
-    end
-    if sigma_eps <= 0.0
-        throw(DomainError("Observation noise standard deviation sigma_eps must be positive"))
-    end
-    if any(eigvals(Q) .<= 0.0) || issymmetric(Q) == false
-        throw(DomainError("State noise covariance Q must be positive definite symmetric matrix"))
-    end
-    if any(eigvals(P0) .<= 0.0) || issymmetric(P0) == false
-        throw(DomainError("Initial state covariance P0 must be positive definite symmetric matrix"))
-    end
-    
-    k = p + 1
-
-    # Forward pass: filter. Begin with prior
-    β_prev = β0
-    P_prev = P0
-
-    # Construct lagged design matrix
-    X = ones(T - p, k)
-    for j in 1:p
-        X[:, j + 1] = y[(p - j + 1):(end - j)]
-    end
-    y_target = y[k:end]
-    T_target = length(y_target)
-
-    # State variable mean and covariance storage
-    β_pred = fill(NaN, T_target, k)   # a_{t|t-1}
-    P_pred = Array{Float64,3}(undef, T_target, k, k)
-    β_filt = fill(NaN, T_target, k)   # a_{t|t}
-    P_filt = Array{Float64,3}(undef, T_target, k, k)
-
-    for t in 1:T_target
-        # Prediction step using flexible state transition
-        if t == 1
-            β_t, P_t = state_transition(reshape(β_prev, 1, k), reshape(P_prev, 1, k, k), Q)
-        else
-            β_t, P_t = state_transition(β_filt[1:t-1, :], P_filt[1:t-1, :, :], Q)
-        end
-
-        # Update. y_t = β_0t + ∑β_kt*y_{t-k} + ϵ_t
-        x_t = X[t, :]
-        y_pred = dot(β_t, x_t)
-        v_t = y_target[t] - y_pred
-        F_t = x_t' * P_t * x_t + sigma_eps^2
-        K_t = P_t * x_t / F_t
-
-        # Filter
-        β_upd = β_t + K_t * v_t
-        P_upd = P_t - K_t * F_t * K_t'
-
-        β_pred[t, :] = β_t
-        P_pred[t, :, :] = P_t
-        β_filt[t, :] = β_upd
-        P_filt[t, :, :] = P_upd
-
-        β_prev = β_upd
-        P_prev = P_upd
-    end
-
-    if smooth == true
-        # Backward pass: smoother
-        β_smooth = similar(β_filt)
-        P_smooth = similar(P_filt)
-
-        β_smooth[end, :] = β_filt[end, :]
-        P_smooth[end, :, :] = P_filt[end, :, :]
-
-        for t in (T_target-1):-1:1
-            P_f = P_filt[t, :, :]
-            P_p_next = P_pred[t+1, :, :]
-            # Scalar smoother gain
-            J_t = P_f / P_p_next         
-
-            β_smooth[t, :] = β_filt[t, :] + J_t * (β_smooth[t+1, :] - β_pred[t+1, :])
-            P_smooth[t, :, :] = P_f + J_t * (P_smooth[t+1, :, :] - P_p_next) * J_t'
-        end
-
-        return β_filt, P_filt, β_smooth, P_smooth
-    else
-        return β_filt, P_filt
-    end
-end
-
-"""
-    state_ar(y::AbstractVector, p::Int; sigma_eps::Real, Q, β0::AbstractVector, P0, 
-             state_transition::Function = (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q), 
-             smooth::Bool=true)
-
-Fit a time-varying autoregressive state space model using Kalman filtering and smoothing.
-
-# Model with random walk state evolution
-```
-y_t = β₀ₜ + ∑_{k=1}^p β_{k,t}*y_{t-k} + ϵ_t,  ϵ_t ~ N(0, σ²ₑₚₛ)
-β_t = β_{t-1} + η_t,  η_t ~ N(0, Q)
-β₀ ~ N(β0, P0)
-```
-
-# Arguments
-- `y::AbstractVector`: Univariate time series observations
-- `p::Int`: Autoregressive order (must be ≥ 1)
-- `sigma_eps::Real`: Standard deviation of observation noise (must be > 0)
-- `Q`: State noise covariance matrix of size (p+1)×(p+1) (can be Real, Vector, or Matrix)
-- `β0::AbstractVector`: Initial state mean (length must be p + 1)
-- `P0`: Initial state covariance matrix of size (p+1)×(p+1) (can be Real, Vector, or Matrix)
-- `state_transition::Function`: Function defining state evolution taking as inputs all previous 
-    betas (t-1) x k), their previous covariances (t-1) x k X k), and Q, 
-    defaults to random walk: (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q)
-- `smooth::Bool`: Whether to apply backward smoothing. (default: true)
-
-# Returns
-If `smooth=true`: tuple of (β_filt, P_filt, β_smooth, P_smooth). 
-If `smooth=false`: tuple of (β_filt, P_filt)
-where each β is (T-p)×(p+1) matrix and P is (T-p)×(p+1)×(p+1) array of estimates.
-β_filt and P_filt are utilizing information up to time t (filtered estimates).
-β_smooth and P_smooth are utilizing information from the entire series (smoothed estimates).
-"""
-function state_ar(y::AbstractVector, p::Int;
-                  sigma_eps::Real,
-                  Q::Union{Real, AbstractVector, AbstractMatrix},
-                  β0::AbstractVector,
-                  P0::Union{Real, AbstractVector, AbstractMatrix},
-                  state_transition::Function = (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q),
-                  smooth::Bool=true)
-    k = p + 1
-    _state_ar(y, p, sigma_eps, _toQ(Q, k), β0, _toP0(P0, k); state_transition=state_transition, smooth=smooth)
-end
-
 function _state_regression(y_target::AbstractVector, X::AbstractMatrix,
                         sigma_eps::Real,
                         Q::AbstractMatrix,
@@ -333,10 +177,15 @@ function _state_regression(y_target::AbstractVector, X::AbstractMatrix,
 
     for t in 1:T_target
         # Prediction step using flexible state transition
-        if t == 1
-            β_t, P_t = state_transition(reshape(β_prev, 1, k), reshape(P_prev, 1, k, k), Q)
-        else
-            β_t, P_t = state_transition(β_filt[1:t-1, :], P_filt[1:t-1, :, :], Q)
+        β_t, P_t = nothing, nothing
+        try
+            if t == 1
+                β_t, P_t = state_transition(reshape(β_prev, 1, k), reshape(P_prev, 1, k, k), Q)
+            else
+                β_t, P_t = state_transition(β_filt[1:t-1, :], P_filt[1:t-1, :, :], Q)
+            end
+        catch e
+            throw(ArgumentError("Error in state_transition function: ", e))
         end
 
         # Update. y_t = β_0t + ∑β_kt*x_kt + ϵ_t
@@ -438,4 +287,52 @@ function state_regression(y_target::AbstractVector, X::Union{AbstractVector, Abs
                     _toP0(P0, k);
                     state_transition=state_transition,
                     smooth=smooth)
+end
+
+"""
+    state_ar(y::AbstractVector, p::Int; sigma_eps::Real, Q, β0::AbstractVector, P0, 
+             state_transition::Function = (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q), 
+             smooth::Bool=true)
+
+Fit a time-varying autoregressive state space model using Kalman filtering and smoothing.
+
+# Model with random walk state evolution
+```
+y_t = β₀ₜ + ∑_{k=1}^p β_{k,t}*y_{t-k} + ϵ_t,  ϵ_t ~ N(0, σ²ₑₚₛ)
+β_t = β_{t-1} + η_t,  η_t ~ N(0, Q)
+β₀ ~ N(β0, P0)
+```
+
+# Arguments
+- `y::AbstractVector`: Univariate time series observations
+- `p::Int`: Autoregressive order (must be ≥ 1)
+- `sigma_eps::Real`: Standard deviation of observation noise (must be > 0)
+- `Q`: State noise covariance matrix of size (p+1)×(p+1) (can be Real, Vector, or Matrix)
+- `β0::AbstractVector`: Initial state mean (length must be p + 1)
+- `P0`: Initial state covariance matrix of size (p+1)×(p+1) (can be Real, Vector, or Matrix)
+- `state_transition::Function`: Function defining state evolution taking as inputs all previous 
+    betas (t-1) x k), their previous covariances (t-1) x k X k), and Q, 
+    defaults to random walk: (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q)
+- `smooth::Bool`: Whether to apply backward smoothing. (default: true)
+
+# Returns
+If `smooth=true`: tuple of (β_filt, P_filt, β_smooth, P_smooth). 
+If `smooth=false`: tuple of (β_filt, P_filt)
+where each β is (T-p)×(p+1) matrix and P is (T-p)×(p+1)×(p+1) array of estimates.
+β_filt and P_filt are utilizing information up to time t (filtered estimates).
+β_smooth and P_smooth are utilizing information from the entire series (smoothed estimates).
+"""
+function state_ar(y::AbstractVector, p::Int;
+                  sigma_eps::Real,
+                  Q::Union{Real, AbstractVector, AbstractMatrix},
+                  β0::AbstractVector,
+                  P0::Union{Real, AbstractVector, AbstractMatrix},
+                  state_transition::Function = (β_filtered, P_filtered, Q) -> (β_filtered[end, :], P_filtered[end, :, :] + Q),
+                  smooth::Bool=true)
+    if p < 1
+        throw(DomainError("Order p must be at least 1"))
+    end
+
+    y_target, X = _create_ar_variables(y, p)
+    return state_regression(y_target, X; sigma_eps, Q, β0, P0, state_transition=state_transition, smooth=smooth)
 end

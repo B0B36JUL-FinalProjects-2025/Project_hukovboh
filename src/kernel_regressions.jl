@@ -132,103 +132,6 @@ function kernel_local_linear(y::AbstractVector, bandwidth::Float64;
     return levels
 end
 
-"""
-    kernel_ar(y::AbstractVector, p::Int, bandwidth::Float64; kernel::Function=epanechnikov_kernel, min_n::Int=8)
-
-Performs time-varying autoregressive (AR) estimation with local-linear kernel estimation.
-
-# Arguments
-- `y::AbstractVector`: Time series vector
-- `p::Int`: Order of the autoregressive model (must be ≥ 1)
-- `bandwidth::Float64`: Kernel bandwidth parameter in (0, 1]
-- `kernel::Function`: Kernel function to use (default: epanechnikov_kernel). Can be any user-defined function that takes a Real input and returns a Float64 output.
-- `min_n::Int`: Minimum number of observations with positive weights for parameter estimation (default: 8). If not enough NaNs are returned for that time point.
-
-# Returns
-- `betas::Matrix`: Matrix of shape (T-p, p+1) containing time-varying AR coefficients (intercept + lag coefficients) for each time point t = p+1, ..., T
-"""
-function kernel_ar(y::AbstractVector, p::Int, bandwidth::Float64; 
-                    kernel::Function=epanechnikov_kernel,
-                    min_n::Int=8)
-
-    T = length(y)
-    k = p + 1
-
-    # Validate inputs
-    if T < p + 1
-        throw(DomainError("Not enough data points to estimate the model"))
-    end
-    if p < 1
-        throw(DomainError("Order p must be at least 1"))
-    end
-    if bandwidth <= 0.0 || bandwidth > 1.0
-        throw(DomainError("Bandwidth must be in (0, 1]"))
-    end
-
-    ts = collect(1:T) ./ T
-    betas = fill(NaN, T-p, k)
-
-    # Construct lagged design matrix without intercept
-    X = ones(T - p, p)
-    for j in 1:p
-        X[:, j] = y[(p - j + 1):(end - j)]
-    end
-    y_target = y[(p + 1):end]
-    ty = ts[(p + 1):end]
-
-    # Corresponds to t = p+idx_t
-    for idx_t in 1:length(y_target)  
-        t0 = ty[idx_t]
-        dt = ty .- t0
-
-        # Create weights for kernel regression
-        w = nothing
-        try
-            w = kernel.(dt ./ bandwidth) ./ bandwidth
-        catch e
-            throw(ArgumentError("Kernel function failed to evaluate: $(typeof(e)) - $e"))
-        end
-        
-        # Positive weights only
-        idx = findall(w .> 0)
-        # Skip if not enough points
-        if length(idx) < min_n
-            continue
-        end
-
-        # Construct local-linear design:
-        # y = a0 + Σ b_j X_j + a1 du + Σ d_j du*X_j
-        # => regressors length = 2k
-        nloc = length(idx)
-        Z = ones(nloc, 2k)
-
-        # Level terms (β0..βp)
-        for j in 1:p
-            Z[:, j+1] .= X[idx, j]
-        end
-
-        # Intercept slope
-        Z[:, k+1] .= dt[idx]
-        # Slope terms in dt
-        for j in 1:p
-            Z[:, k+1+j] .= dt[idx] .* X[idx, j]
-        end
-
-        yloc = y_target[idx]
-        wroot = sqrt.(w[idx])
-        Ztilde = Z .* wroot
-        ytilde = yloc .* wroot
-
-        θ = Ztilde \ ytilde
-        # Local-linear estimates at u0
-        betas_loc = θ[1:k]    
-
-        betas[idx_t, :] .= betas_loc
-    end
-
-    return betas
-end
-
 
 """
     kernel_regression(y_target::AbstractVector, X::AbstractMatrix, bandwidth::Float64; kernel::Function=epanechnikov_kernel, min_n::Int=8)
@@ -340,6 +243,38 @@ function kernel_regression(y_target::AbstractVector, X::AbstractVector, bandwidt
     return kernel_regression(y_target, reshape(X, :, 1), bandwidth; 
                             kernel=kernel, min_n=min_n)
 end
+
+"""
+    kernel_ar(y::AbstractVector, p::Int, bandwidth::Float64; kernel::Function=epanechnikov_kernel, min_n::Int=8)
+
+Performs time-varying autoregressive (AR) estimation with local-linear kernel estimation.
+
+# Arguments
+- `y::AbstractVector`: Time series vector
+- `p::Int`: Order of the autoregressive model (must be ≥ 1)
+- `bandwidth::Float64`: Kernel bandwidth parameter in (0, 1]
+- `kernel::Function`: Kernel function to use (default: epanechnikov_kernel). Can be any user-defined function that takes a Real input and returns a Float64 output.
+- `min_n::Int`: Minimum number of observations with positive weights for parameter estimation (default: 8). If not enough NaNs are returned for that time point.
+
+# Returns
+- `betas::Matrix`: Matrix of shape (T-p, p+1) containing time-varying AR coefficients (intercept + lag coefficients) for each time point t = p+1, ..., T
+"""
+function kernel_ar(y::AbstractVector, p::Int, bandwidth::Float64; 
+                    kernel::Function=epanechnikov_kernel,
+                    min_n::Int=8)
+
+    # Validate inputs
+    if p < 1
+        throw(DomainError("Order p must be at least 1"))
+    end
+
+    # Construct lagged design matrix without intercept
+    y_target, X = _create_ar_variables(y, p)
+
+    return kernel_regression(y_target, X, bandwidth; 
+                            kernel=kernel, min_n=min_n)
+end
+
 
 """
     lowess_regression(y_target::AbstractVector, X::AbstractVector, bandwidth::Float64, n_iter::Int; 
@@ -503,96 +438,14 @@ function lowess_ar(y::AbstractVector, p::Int, bandwidth::Float64, n_iter::Int;
                     delta_kernel::Function=quartic_kernel,
                     min_n::Int=8)
 
-    T = length(y)
-    k = p + 1
-
     # Validate inputs
-    if T < p + 1
-        throw(DomainError("Not enough data points to estimate the model"))
-    end
     if p < 1
         throw(DomainError("Order p must be at least 1"))
     end
-    if bandwidth <= 0.0 || bandwidth > 1.0
-        throw(DomainError("Bandwidth must be in (0, 1]"))
-    end
-    if n_iter < 1
-        throw(DomainError("Number of iterations n_iter must be at least 1"))
-    end
-
-    ts = collect(1:T) ./ T
-    betas = fill(NaN, T-p, k)
 
     # Construct lagged design matrix without intercept
-    n_obs = T - p
-    X = ones(n_obs, p)
-    for j in 1:p
-        X[:, j] = y[(p - j + 1):(end - j)]
-    end
-    y_target = y[(p + 1):end]
-    ty = ts[(p + 1):end]
+    y_target, X = _create_ar_variables(y, p)
 
-    # Lowess deltas and residuals
-    δs = ones(length(y_target))
-    residuals = similar(y_target)
-
-    for iter in 1:n_iter
-        # Corresponds to t = p+idx_t
-        for idx_t in 1:length(y_target)  
-            t0 = ty[idx_t]
-            dt = ty .- t0
-
-            # Create weights for kernel regression
-            w = nothing
-            try
-                w = δs .* kernel.(dt ./ bandwidth) ./ bandwidth
-            catch e
-                throw(ArgumentError("Kernel function failed to evaluate: $(typeof(e)) - $e"))
-            end
-            
-            # Positive weights only
-            idx = findall(w .> 0)
-            # Skip if not enough points
-            if length(idx) < min_n
-                continue
-            end
-
-            # Construct local-linear design:
-            # y = a0 + Σ b_j X_j + a1 du + Σ d_j du*X_j
-            # => regressors length = 2k
-            nloc = length(idx)
-            Z = ones(nloc, 2k)
-
-            # Level terms (β0..βp)
-            for j in 1:p
-                Z[:, j+1] .= X[idx, j]
-            end
-
-            # Intercept slope
-            Z[:, k+1] .= dt[idx]
-            # Slope terms in dt
-            for j in 1:p
-                Z[:, k+1+j] .= dt[idx] .* X[idx, j]
-            end
-
-            yloc = y_target[idx]
-            wroot = sqrt.(w[idx])
-            Ztilde = Z .* wroot
-            ytilde = yloc .* wroot
-
-            θ = Ztilde \ ytilde
-            # Local-linear estimates at u0
-            betas_loc = θ[1:k]    
-
-            betas[idx_t, :] .= betas_loc
-
-            # Update residuals
-            residuals[idx_t] = y_target[idx_t] - dot(betas_loc, [1.0; X[idx_t, :]])
-        end
-
-        # Update δs based on residuals
-        δs = delta_kernel.(residuals ./ (6 * median(abs.(residuals))))
-    end
-
-    return betas
+    return lowess_regression(y_target, X, bandwidth, n_iter; 
+                            kernel=kernel, delta_kernel=delta_kernel, min_n=min_n)
 end

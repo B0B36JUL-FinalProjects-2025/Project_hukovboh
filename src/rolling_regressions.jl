@@ -87,44 +87,10 @@ Perform rolling window autoregressive (AR) regression on the time series `y`.
 - `betas::Matrix{Float64}`: Matrix of shape n_windows × (p + 1) containing estimated coefficients (intercept + lag coefficients)
 """
 function rolling_ar(y::AbstractVector, p::Int, window_size::Int; expanding::Bool=false)
-    T = length(y)
-    # We lose p observations for lagging
-    n_windows = T - window_size - p + 1
-
-    if T < p + 1
-        throw(DomainError("Not enough data points to estimate the model"))
-    end
-    if window_size > T
-        throw(DomainError("Window size cannot be larger than the length of the time series"))
-    end
     if p < 1
         throw(DomainError("Order p must be at least 1"))
     end
-    if window_size < p + 1
-        throw(DomainError("Window size must be at least number of features + 1 to estimate coefficients"))
-    end
 
-    betas = Array{Float64}(undef, n_windows, p + 1)  
-
-    # Construct lagged design matrix
-    X = ones(T - p, p + 1)
-    for j in 1:p
-        X[:, j + 1] = y[(p - j + 1):(end - j)]
-    end
-    y_target = y[(p + 1):end]
-
-    for t in 1:n_windows
-        if expanding
-            y_window = y_target[1:(t + window_size - 1)]
-            X_window = X[1:(t + window_size - 1), :]
-        else
-            y_window = y_target[t:(t + window_size - 1)]
-            X_window = X[t:(t + window_size - 1), :]
-        end
-
-        # Estimate coefficients
-        betas[t, :] = X_window \ y_window
-    end
-
-    return betas
+    y_target, X = _create_ar_variables(y, p)
+    return rolling_regression(y_target, X, window_size; expanding=expanding)
 end

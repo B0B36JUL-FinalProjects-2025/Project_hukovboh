@@ -31,21 +31,21 @@ function kernel_QBLL(T::Int, H::Real, kernel::Function)
 end
 
 """
-    QBLL_regression(y::AbstractVector, X::AbstractMatrix, Nsim::Int, H::Real; kernel::Function=epanechnikov_kernel)
+    QBLL_regression(y::AbstractVector, X::AbstractMatrix, n_iter::Int, H::Real; kernel::Function=epanechnikov_kernel)
 
 Performs Quasi-Bayesian Local Likelihood (QBLL) regression.
 
 Arguments:
     y::AbstractVector: Response variable vector.
     X::AbstractMatrix: Predictor variables matrix.
-    Nsim::Int: Number of posterior simulations per time point.
+    n_iter::Int: Number of posterior simulations per time point.
     H::Real: Bandwidth parameter for kernel weighting from interval [1, T] where T is the number of observations.
     kernel::Function: Kernel function (default: epanechnikov_kernel).
 
 Returns:
     betas::Matrix: Matrix of posterior median estimates for regression coefficients at each time point.
 """
-function QBLL_regression(y::AbstractVector, X::AbstractMatrix, Nsim::Int, H::Real; 
+function QBLL_regression(y::AbstractVector, X::AbstractMatrix, n_iter::Int, H::Real; 
                         kernel::Function=epanechnikov_kernel)
     T = size(y,1)
     p = size(X,2)
@@ -57,8 +57,8 @@ function QBLL_regression(y::AbstractVector, X::AbstractMatrix, Nsim::Int, H::Rea
     if size(X, 1) != T
         throw(DimensionMismatch("Length of y must match number of rows in X"))
     end
-    if Nsim <= 0
-        throw(DomainError("Number of simulations Nsim must be positive"))
+    if n_iter <= 0
+        throw(DomainError("Number of simulations n_iter must be positive"))
     end
     if H <= 0.0 || H > T
         throw(DomainError("Bandwidth must be in (0, T]"))
@@ -85,7 +85,7 @@ function QBLL_regression(y::AbstractVector, X::AbstractMatrix, Nsim::Int, H::Rea
     betas = zeros(T, 1 + p);
     
     for ii in 1:T
-        B1 = zeros(p+1,Nsim)
+        B1 = zeros(p+1,n_iter)
         
         w=weights[ii,:]
         bayesprec = k0 + X' * Diagonal(w) * X
@@ -98,7 +98,7 @@ function QBLL_regression(y::AbstractVector, X::AbstractMatrix, Nsim::Int, H::Rea
         g3 = BB' * bayesprec * BB
         bayesgamma = g0 + 0.5 * (g1 + g2 - g3)
 
-        for ll in 1:Nsim
+        for ll in 1:n_iter
             B1[:,ll] = BB + cholesky(Symmetric(bayessv) .* 1.0).U' * randn(p + 1) * sqrt(rand(Gamma(bayesalpha,1 / bayesgamma)))
         end
 
@@ -111,40 +111,34 @@ function QBLL_regression(y::AbstractVector, X::AbstractMatrix, Nsim::Int, H::Rea
     return betas
 end
 
-function QBLL_regression(y::AbstractVector, X::AbstractVector, Nsim::Int, H::Real; 
+function QBLL_regression(y::AbstractVector, X::AbstractVector, n_iter::Int, H::Real; 
                         kernel::Function=epanechnikov_kernel)
-    return QBLL_regression(y, reshape(X, :, 1), Nsim, H; kernel=kernel)
+    return QBLL_regression(y, reshape(X, :, 1), n_iter, H; kernel=kernel)
 end
 
 """
-    QBLL_ar(y::AbstractVector, p::Int, Nsim::Int, H::Real; kernel::Function=epanechnikov_kernel)
+    QBLL_ar(y::AbstractVector, p::Int, n_iter::Int, H::Real; kernel::Function=epanechnikov_kernel)
 
 Performs Quasi-Bayesian Local Likelihood (QBLL) regression for autoregressive models.
 
 Arguments:
     y::AbstractVector: Time series variable vector.
     p::Int: Autoregressive order (number of lags).
-    Nsim::Int: Number of posterior simulations per time point.
+    n_iter::Int: Number of posterior simulations per time point.
     H::Real: Bandwidth parameter for kernel weighting from interval [1, T-p] where T is the number of observations.
     kernel::Function: Kernel function (default: epanechnikov_kernel).
 
 Returns:
     betas::Matrix: Matrix of posterior median estimates for autoregressive coefficients at each time point.
 """
-function QBLL_ar(y::AbstractVector, p::Int, Nsim::Int, H::Real; 
+function QBLL_ar(y::AbstractVector, p::Int, n_iter::Int, H::Real; 
                     kernel::Function=epanechnikov_kernel)
-    T = length(y)
     if p < 1
         throw(DomainError("AR order p must be at least 1"))
     end
-    X = zeros(T - p, p)
 
-    for i in 1:p
-        X[:, i] = y[(p - i + 1):(T - i)]
-    end
-
-    y_trim = y[(p + 1):end]
-    betas = QBLL_regression(y_trim, X, Nsim, H; kernel=kernel)
+    y_target, X = _create_ar_variables(y, p)
+    betas = QBLL_regression(y_target, X, n_iter, H; kernel=kernel)
 
     return betas
 end

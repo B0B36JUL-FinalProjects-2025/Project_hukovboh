@@ -1,6 +1,6 @@
 module TVModels
 
-
+include("helpers.jl")
 include("kernels.jl")
 include("rolling_regressions.jl")
 include("kernel_regressions.jl")
